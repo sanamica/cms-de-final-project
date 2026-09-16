@@ -1,0 +1,51 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Environment / secrets ---
+.env
+.env.*
+*.pem
+*credentials*.json
+*.token
+
+# --- VS Code ---
+.vscode/
+*.code-workspace
+
+# --- Databricks ---
+.databricks/
+.databricks-connect
+
+# --- dbt ---
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# --- Jupyter / notebook checkpoints ---
+.ipynb_checkpoints/
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+
+# --- Data files you don't want committed ---
+*.csv
+*.json
+!config*.json
+data/raw/
+data/landing/
+
+# --- Logs ---
+*.log
