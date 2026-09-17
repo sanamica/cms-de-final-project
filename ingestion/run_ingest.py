@@ -14,7 +14,7 @@ No S3, no GCS — the landing path IS the Databricks Volume, so this runs
 identically in a notebook or a Job cluster without extra cloud wiring.
 """
 
-from __future__ import annotations
+#from __future__ import annotations
 
 import json
 import logging
