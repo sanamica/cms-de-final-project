@@ -85,11 +85,11 @@ DATASETS: list[DatasetSpec] = [
     # ),
 
     # --- Provider Data Catalog examples ---
-    # DatasetSpec(
-    #     key="hospital_general_information",
-    #     source="provider_data_catalog",
-    #     identifier="REPLACE_WITH_DATASET_UUID",
-    # ),
+    DatasetSpec(
+        key="hospital_general_information",
+        source="provider_data_catalog",
+        identifier="hospital_general_info",
+    ),
     # DatasetSpec(
     #     key="hospital_readmissions_complications",
     #     source="provider_data_catalog",
