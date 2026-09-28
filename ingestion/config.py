@@ -88,7 +88,7 @@ DATASETS: list[DatasetSpec] = [
     DatasetSpec(
         key="hospital_general_information",
         source="provider_data_catalog",
-        identifier="hospital_general_info",
+        identifier="xubh-q36u",
     ),
     # DatasetSpec(
     #     key="hospital_readmissions_complications",
