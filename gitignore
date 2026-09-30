@@ -26,6 +26,7 @@ env/
 # --- Databricks ---
 .databricks/
 .databricks-connect
+.assistant_instructions.md
 
 # --- dbt ---
 target/
