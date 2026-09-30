@@ -122,21 +122,67 @@ DATASETS: list[DatasetSpec] = [
 class HospitalFileSpec:
     key: str              # short name used in landing path + manifest, e.g. "vumc_mrf"
     hospital_name: str
+    system: str
+    state: str
     ccn: str              # CMS Certification Number (6 chars, keep as string!)
     url: str              # direct download URL of the machine-readable file
     file_format: str      # "csv" | "json" | "zip"
+    source_type: str      # "direct_mrf"
 
 
 HOSPITAL_FILES: list[HospitalFileSpec] = [
     # Fill in one entry per Nashville-area hospital after you have confirmed the
     # direct file URL on the hospital's price transparency page. Example shape:
-    # HospitalFileSpec(
-    #     key="example_hospital_mrf",
-    #     hospital_name="EXAMPLE HOSPITAL",
-    #     ccn="440000",
-    #     url="https://example.org/path/to/standard-charges.csv",
-    #     file_format="csv",
-    # ),
+   HospitalFileSpec(
+        key="vumc_mrf",
+        hospital_name="Vanderbilt University Medical Center",
+        system="Vanderbilt",
+        state="TN",
+        ccn="440039",
+        url="https://finance.vumc.org/assets/pub/pt/352528741_vanderbilt-university-medical-center_standardcharges.json",
+        file_format="json",
+        source_type="direct_mrf"
+    ),
+    HospitalFileSpec(
+        key="sthss_mrf",
+        hospital_name="Saint Thomas Hospital for Specialty Surgery",
+        system="Ascension",
+        state="TN",
+        ccn="621772",
+        url="https://mrfs.hyvehealthcare.com/USPI/621772195_baptist-womens-health-center-llc_standardcharges.json",
+        file_format="json",
+        source_type="direct_mrf"
+    ),
+    HospitalFileSpec(
+        key="struth_mrf",
+        hospital_name="Ascension Saint Thomas Rutherford",
+        system="Ascension",
+        state="TN",
+        ccn="620475",
+        url="https://healthcare.ascension.org/-/media/project/ascension/healthcare/price-transparency-files/tn-csv/620475842_saint-thomas-rutherford-hospital_standardcharges.csv",
+        file_format="csv",
+        source_type="direct_mrf"
+    ),
+    HospitalFileSpec(
+        key="wmc_mrf",
+        hospital_name="Williamson Medical Center",
+        system="Williamson Health",
+        state="TN",
+        ccn="621501",
+        url="https://williamsonhealth.org/content/uploads/2026/08/621501534_williamson-medical-center_standardcharges.csv",
+        file_format="csv",
+        source_type="direct_mrf"
+    ),
+    HospitalFileSpec(
+        key="tcent_mrf",
+        hospital_name="TriStar Centennial Medical Center",
+        system="HCA/TriStar",
+        state="TN",
+        ccn="TRISTAR_CENTENNIAL_CCN",
+        url="TRISTAR_CENTENNIAL_URL",
+        file_format="json",
+        source_type="direct_mrf"
+    )
 ]
 
 
