@@ -9,12 +9,14 @@ What it does, per dataset in config.DATASETS:
   3. Log every page to the manifest Delta table — success or failure.
   4. Never let one bad page kill the whole run: a page-level exception is
      caught, logged as "failed", and the loop moves to the next page/dataset.
+  5. Download each hospital price file in config.HOSPITAL_FILES (streamed, with
+     checksum) into <volume>/hospital_price_files/ and log it the same way.
 
 No S3, no GCS — the landing path IS the Databricks Volume, so this runs
 identically in a notebook or a Job cluster without extra cloud wiring.
 """
 
-#from __future__ import annotations
+from __future__ import annotations
 
 import json
 import logging
@@ -23,7 +25,8 @@ from datetime import date
 import httpx
 
 from .cms_data_api import fetch_dataset_pages as fetch_cms_data_pages
-from .config import DATASETS, VOLUME_ROOT, DatasetSpec
+from .config import DATASETS, FILES, HOSPITAL_FILES, VOLUME_ROOT, DatasetSpec, HospitalFileSpec
+from .hospital_files import download_hospital_file
 from .http_client import RetryableRequestError
 from .manifest import ensure_manifest_table, log_event, new_run_id, run_summary
 from .provider_data_catalog import fetch_dataset_pages as fetch_provider_pages
@@ -88,29 +91,75 @@ def ingest_dataset(client: httpx.Client, spark, run_id: str, spec: DatasetSpec) 
             status="failed", error_message=str(exc),
         )
         return
+    except Exception as exc:
+        # Anything else raised while fetching: a non-retryable HTTP error (e.g.
+        # 404 for a bad dataset ID, which http_client re-raises immediately),
+        # invalid JSON, or a protocol error. Log it and let the run continue.
+        logger.exception("Unexpected error fetching %s", spec.key)
+        log_event(
+            spark, run_id, spec.key, spec.source,
+            status="failed", error_message=f"{type(exc).__name__}: {exc}",
+        )
+        return
 
     logger.info("Finished dataset=%s total_rows=%s landing_dir=%s", spec.key, total_rows, landing_dir)
 
 
-def main(spark) -> str:
+HOSPITAL_FILE_SOURCE = "hospital_price_file"
+
+
+def ingest_hospital_file(client: httpx.Client, spark, run_id: str, spec: HospitalFileSpec) -> None:
+    """Download one hospital price file and log the outcome to the manifest.
+    download_hospital_file never raises, so one bad hospital can't stop the run."""
+    log_event(spark, run_id, spec.key, HOSPITAL_FILE_SOURCE, status="started")
+    result = download_hospital_file(spec, client, run_id)
+    log_event(
+        spark, run_id, spec.key, HOSPITAL_FILE_SOURCE,
+        status=result.status,
+        error_message=result.error,
+        landing_path=result.path,
+        file_bytes=result.bytes_written if result.status == "succeeded" else None,
+        sha256=result.sha256,
+    )
+    logger.info("Hospital file key=%s status=%s bytes=%s", spec.key, result.status, result.bytes_written)
+
+
+def main(spark, datasets: list[DatasetSpec] | None = None,
+         hospital_files: list[HospitalFileSpec] | None = None) -> str:
     """
     `spark` is the active SparkSession — in a Databricks notebook this is
     just the `spark` global already in scope; pass it explicitly here so
     this module has no hidden dependency on notebook context.
+
+    `datasets` / `hospital_files` default to the lists in config. Pass a
+    shorter list to test one source without editing config.py, e.g.
+    `main(spark, datasets=[], hospital_files=config.HOSPITAL_FILES[:1])`.
     """
-    if not DATASETS:
+    datasets = DATASETS if datasets is None else datasets
+    hospital_files = HOSPITAL_FILES if hospital_files is None else hospital_files
+    if not datasets and not hospital_files:
         raise ValueError(
-            "config.DATASETS is empty — add at least one DatasetSpec "
-            "(dataset UUID/ID) before running ingestion."
+            "Nothing to ingest — add a DatasetSpec to config.DATASETS "
+            "and/or a HospitalFileSpec to config.HOSPITAL_FILES."
         )
 
     ensure_manifest_table(spark)
     run_id = new_run_id()
-    logger.info("Starting ingestion run_id=%s for %s dataset(s)", run_id, len(DATASETS))
+    logger.info(
+        "Starting ingestion run_id=%s for %s dataset(s) and %s hospital file(s)",
+        run_id, len(datasets), len(hospital_files),
+    )
 
-    with httpx.Client(headers={"User-Agent": "nss-de-final-project/1.0"}) as client:
-        for spec in DATASETS:
-            ingest_dataset(client, spark, run_id, spec)
+    if datasets:
+        with httpx.Client(headers={"User-Agent": "nss-de-final-project/1.0"}) as client:
+            for spec in datasets:
+                ingest_dataset(client, spark, run_id, spec)
+
+    if hospital_files:
+        # Separate client: some hospital sites reject non-browser User-Agents.
+        with httpx.Client(headers={"User-Agent": FILES.user_agent}) as file_client:
+            for spec in hospital_files:
+                ingest_hospital_file(file_client, spark, run_id, spec)
 
     logger.info("Run %s complete. Summary:", run_id)
     run_summary(spark, run_id).show(truncate=False)

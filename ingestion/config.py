@@ -90,12 +90,73 @@ DATASETS: list[DatasetSpec] = [
         source="provider_data_catalog",
         identifier="xubh-q36u",
     ),
-    # DatasetSpec(
-    #     key="hospital_readmissions_complications",
-    #     source="provider_data_catalog",
-    #     identifier="REPLACE_WITH_DATASET_UUID",
+    # --- Outcomes for the THA/TKA readmission question ---
+    # VERIFY these identifiers with the list_datasets cell in your setup
+    # notebook before the first run. Each file covers many measures; keep them
+    # whole in bronze and filter to the hip/knee measure IDs in silver.
+    DatasetSpec(
+        key="unplanned_hospital_visits",       # includes hip/knee 30-day readmission
+        source="provider_data_catalog",
+        identifier="632h-zaca",
+    ),
+    DatasetSpec(
+        key="complications_and_deaths",        # includes hip/knee complication rate
+        source="provider_data_catalog",
+        identifier="ynj2-r877",
+    ),
+    DatasetSpec(
+        key="hrrp_readmissions_reduction",     # excess readmission ratios (THA/TKA)
+        source="provider_data_catalog",
+        identifier="9n3s-kdb3",
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
+# Hospital price transparency files (negotiated-rate machine-readable files)
+# ---------------------------------------------------------------------------
+# Unlike the CMS datasets above, these are plain file downloads from each
+# hospital's own website, so they get their own spec + downloader
+# (see hospital_files.py). One entry per hospital file.
+@dataclass
+class HospitalFileSpec:
+    key: str              # short name used in landing path + manifest, e.g. "vumc_mrf"
+    hospital_name: str
+    ccn: str              # CMS Certification Number (6 chars, keep as string!)
+    url: str              # direct download URL of the machine-readable file
+    file_format: str      # "csv" | "json" | "zip"
+
+
+HOSPITAL_FILES: list[HospitalFileSpec] = [
+    # Fill in one entry per Nashville-area hospital after you have confirmed the
+    # direct file URL on the hospital's price transparency page. Example shape:
+    # HospitalFileSpec(
+    #     key="example_hospital_mrf",
+    #     hospital_name="EXAMPLE HOSPITAL",
+    #     ccn="440000",
+    #     url="https://example.org/path/to/standard-charges.csv",
+    #     file_format="csv",
     # ),
 ]
+
+
+@dataclass
+class FileDownloadConfig:
+    # Price files can be very large and slow to start, so the read timeout is
+    # much longer than the API timeout above.
+    connect_timeout_seconds: float = 30.0
+    read_timeout_seconds: float = 300.0
+    chunk_bytes: int = 1024 * 1024                 # stream in 1 MiB chunks
+    max_bytes: int = int(os.environ.get("CMS_MAX_FILE_BYTES", 2 * 1024**3))  # safety cap
+    # Some hospital sites return 403 to non-browser User-Agents.
+    user_agent: str = "Mozilla/5.0 (compatible; nss-de-final-project/1.0)"
+    retry: RetryConfig = field(default_factory=RetryConfig)
+
+
+FILES = FileDownloadConfig()
+
+# Landing path for hospital price files inside the same Volume as the API data.
+PRICE_FILES_ROOT = f"{VOLUME_ROOT}/hospital_price_files"
 
 
 def apply_widget_overrides(dbutils) -> None:
@@ -104,12 +165,13 @@ def apply_widget_overrides(dbutils) -> None:
     so you can re-run ingestion for a different catalog/schema without
     editing this file. Call at the top of a notebook if you want it.
     """
-    global CATALOG, BRONZE_SCHEMA, LANDING_VOLUME, VOLUME_ROOT, MANIFEST_TABLE
+    global CATALOG, BRONZE_SCHEMA, LANDING_VOLUME, VOLUME_ROOT, MANIFEST_TABLE, PRICE_FILES_ROOT
     CATALOG = dbutils.widgets.get("catalog") if _has_widget(dbutils, "catalog") else CATALOG
     BRONZE_SCHEMA = dbutils.widgets.get("bronze_schema") if _has_widget(dbutils, "bronze_schema") else BRONZE_SCHEMA
     LANDING_VOLUME = dbutils.widgets.get("landing_volume") if _has_widget(dbutils, "landing_volume") else LANDING_VOLUME
     VOLUME_ROOT = f"/Volumes/{CATALOG}/{BRONZE_SCHEMA}/{LANDING_VOLUME}"
     MANIFEST_TABLE = f"{CATALOG}.{BRONZE_SCHEMA}.ingestion_manifest"
+    PRICE_FILES_ROOT = f"{VOLUME_ROOT}/hospital_price_files"
 
 
 def _has_widget(dbutils, name: str) -> bool:

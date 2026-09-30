@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
+    LongType,
     StringType,
     StructField,
     StructType,
@@ -31,15 +32,22 @@ MANIFEST_SCHEMA = StructType(
     [
         StructField("run_id", StringType(), False),
         StructField("dataset_key", StringType(), False),
-        StructField("source", StringType(), False),       # cms_data_api | provider_data_catalog
+        StructField("source", StringType(), False),       # cms_data_api | provider_data_catalog | hospital_price_file
         StructField("page_number", IntegerType(), True),
         StructField("row_count", IntegerType(), True),
         StructField("status", StringType(), False),        # started | succeeded | failed
         StructField("error_message", StringType(), True),
         StructField("landing_path", StringType(), True),
         StructField("event_ts", TimestampType(), False),
+        # Added for hospital price files. Kept at the END so the order matches
+        # what ALTER TABLE ... ADD COLUMNS produces on an existing table.
+        StructField("file_bytes", LongType(), True),
+        StructField("sha256", StringType(), True),
     ]
 )
+
+# Columns added after the table was first created (name -> SQL type).
+_ADDED_COLUMNS = {"file_bytes": "BIGINT", "sha256": "STRING"}
 
 
 def new_run_id() -> str:
@@ -47,9 +55,16 @@ def new_run_id() -> str:
 
 
 def ensure_manifest_table(spark: SparkSession) -> None:
-    """Create the manifest table if it doesn't exist yet. Idempotent."""
-    empty_df = spark.createDataFrame([], MANIFEST_SCHEMA)
-    empty_df.writeTo(MANIFEST_TABLE).createOrReplace() if not _table_exists(spark, MANIFEST_TABLE) else None
+    """Create the manifest table if it doesn't exist yet, and add any columns
+    introduced after it was first created. Idempotent."""
+    if not _table_exists(spark, MANIFEST_TABLE):
+        spark.createDataFrame([], MANIFEST_SCHEMA).writeTo(MANIFEST_TABLE).createOrReplace()
+        return
+    existing = {f.name for f in spark.table(MANIFEST_TABLE).schema.fields}
+    missing = {name: sql_type for name, sql_type in _ADDED_COLUMNS.items() if name not in existing}
+    if missing:
+        cols = ", ".join(f"{name} {sql_type}" for name, sql_type in missing.items())
+        spark.sql(f"ALTER TABLE {MANIFEST_TABLE} ADD COLUMNS ({cols})")
 
 
 def _table_exists(spark: SparkSession, table_name: str) -> bool:
@@ -70,6 +85,8 @@ def log_event(
     row_count: int | None = None,
     error_message: str | None = None,
     landing_path: str | None = None,
+    file_bytes: int | None = None,
+    sha256: str | None = None,
 ) -> None:
     """Append a single manifest event. Called for every page, plus run
     start/end, so the manifest table doubles as an audit log and a
@@ -85,6 +102,8 @@ def log_event(
             error_message,
             landing_path,
             datetime.now(timezone.utc),
+            file_bytes,
+            sha256,
         )
     ]
     spark.createDataFrame(row, MANIFEST_SCHEMA).write.format("delta").mode("append").saveAsTable(MANIFEST_TABLE)
@@ -96,7 +115,8 @@ def run_summary(spark: SparkSession, run_id: str):
     return spark.sql(
         f"""
         SELECT dataset_key, source, status, count(*) AS events,
-               sum(coalesce(row_count, 0)) AS total_rows
+               sum(coalesce(row_count, 0)) AS total_rows,
+               sum(coalesce(file_bytes, 0)) AS total_bytes
         FROM {MANIFEST_TABLE}
         WHERE run_id = '{run_id}'
         GROUP BY dataset_key, source, status
