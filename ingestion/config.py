@@ -172,16 +172,6 @@ HOSPITAL_FILES: list[HospitalFileSpec] = [
         url="https://williamsonhealth.org/content/uploads/2026/08/621501534_williamson-medical-center_standardcharges.csv",
         file_format="csv",
         source_type="direct_mrf"
-    ),
-    HospitalFileSpec(
-        key="tcent_mrf",
-        hospital_name="TriStar Centennial Medical Center",
-        system="HCA/TriStar",
-        state="TN",
-        ccn="TRISTAR_CENTENNIAL_CCN",
-        url="TRISTAR_CENTENNIAL_URL",
-        file_format="json",
-        source_type="direct_mrf"
     )
 ]
 
