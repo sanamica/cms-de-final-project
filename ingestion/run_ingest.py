@@ -25,7 +25,8 @@ from datetime import date
 
 import httpx
 
-from . import sanity
+from . import ingestion_checks as sanity
+
 from .cms_data_api import fetch_dataset_pages as fetch_cms_data_pages
 from .config import DATASETS, FILES, HOSPITAL_FILES, VOLUME_ROOT, DatasetSpec, HospitalFileSpec
 from .hospital_files import download_hospital_file
@@ -139,7 +140,7 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
     `main(spark, datasets=[], hospital_files=config.HOSPITAL_FILES[:1])`.
 
     After ingesting, a sanity report is printed for every source (see
-    sanity.py). If any check FAILS, a SanityCheckError is raised so a Job
+    ingestion_checks.py). If any check FAILS, a SanityCheckError is raised so a Job
     task shows as failed; the run_id is in the message. Pass
     `verify_checksum=False` to skip re-reading large files, or
     `run_checks=False` to skip the checks entirely.
