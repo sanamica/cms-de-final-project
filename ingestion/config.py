@@ -74,6 +74,8 @@ class DatasetSpec:
     source: str               # "cms_data_api" or "provider_data_catalog"
     identifier: str           # dataset UUID
     filters: dict | None = None  # optional column filters, source-specific
+    min_rows: int = 100          # sanity check: fail if fewer rows than this landed
+    required_columns: tuple = () # sanity check: columns that must exist (lowercase names)
 
 
 DATASETS: list[DatasetSpec] = [
@@ -128,6 +130,7 @@ class HospitalFileSpec:
     url: str              # direct download URL of the machine-readable file
     file_format: str      # "csv" | "json" | "zip"
     source_type: str      # "direct_mrf"
+    min_bytes: int = 10_000   # sanity check: fail if the landed file is smaller than this
 
 
 HOSPITAL_FILES: list[HospitalFileSpec] = [

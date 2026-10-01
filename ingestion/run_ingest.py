@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import date
 
 import httpx
 
+from . import sanity
 from .cms_data_api import fetch_dataset_pages as fetch_cms_data_pages
 from .config import DATASETS, FILES, HOSPITAL_FILES, VOLUME_ROOT, DatasetSpec, HospitalFileSpec
 from .hospital_files import download_hospital_file
@@ -125,7 +127,8 @@ def ingest_hospital_file(client: httpx.Client, spark, run_id: str, spec: Hospita
 
 
 def main(spark, datasets: list[DatasetSpec] | None = None,
-         hospital_files: list[HospitalFileSpec] | None = None) -> str:
+         hospital_files: list[HospitalFileSpec] | None = None,
+        run_checks: bool = True, verify_checksum: bool = True) -> str:
     """
     `spark` is the active SparkSession — in a Databricks notebook this is
     just the `spark` global already in scope; pass it explicitly here so
@@ -134,6 +137,12 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
     `datasets` / `hospital_files` default to the lists in config. Pass a
     shorter list to test one source without editing config.py, e.g.
     `main(spark, datasets=[], hospital_files=config.HOSPITAL_FILES[:1])`.
+
+    After ingesting, a sanity report is printed for every source (see
+    sanity.py). If any check FAILS, a SanityCheckError is raised so a Job
+    task shows as failed; the run_id is in the message. Pass
+    `verify_checksum=False` to skip re-reading large files, or
+    `run_checks=False` to skip the checks entirely.
     """
     datasets = DATASETS if datasets is None else datasets
     hospital_files = HOSPITAL_FILES if hospital_files is None else hospital_files
@@ -150,22 +159,50 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
         run_id, len(datasets), len(hospital_files),
     )
 
+    timings: dict[str, float] = {}
+
     if datasets:
         with httpx.Client(headers={"User-Agent": "nss-de-final-project/1.0"}) as client:
             for spec in datasets:
+                started = time.monotonic()
                 ingest_dataset(client, spark, run_id, spec)
+                timings[spec.key] = time.monotonic() - started
 
     if hospital_files:
         # Separate client: some hospital sites reject non-browser User-Agents.
         with httpx.Client(headers={"User-Agent": FILES.user_agent}) as file_client:
             for spec in hospital_files:
+                started = time.monotonic()
                 ingest_hospital_file(file_client, spark, run_id, spec)
+                timings[spec.key] = time.monotonic() - started
 
     logger.info("Run %s complete. Summary:", run_id)
     run_summary(spark, run_id).show(truncate=False)
+
+    print("\nTime per source")
+    for key, seconds in timings.items():
+        print(f"  {key:32} {seconds:8.1f} s")
+    print(f"  {'total':32} {sum(timings.values()):8.1f} s")
+
+    if run_checks:
+        failures = _run_sanity_checks(spark, run_id, [*datasets, *hospital_files], verify_checksum)
+        if failures:
+            raise sanity.SanityCheckError(f"run_id={run_id}: " + "; ".join(failures)) 
     return run_id
 
 
+def _run_sanity_checks(spark, run_id: str, specs: list, verify_checksum: bool) -> list[str]:
+    """Print a report for every source; return a description of each source that failed."""
+    failures: list[str] = []
+    for spec in specs:
+        results = sanity.check_source(spark, run_id, spec, verify_checksum)
+        sanity.print_report(spec.key, results)
+        failed = [r.name for r in results if r.status == sanity.FAIL]
+        if failed:
+            failures.append(f"{spec.key}: {', '.join(failed)}")
+    return failures
+
+    
 if __name__ == "__main__":
     # For Job-cluster execution: `spark` is provided by the Databricks
     # runtime as a global even in a plain .py entry point run as a Job task.
