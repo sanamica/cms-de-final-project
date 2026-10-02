@@ -135,34 +135,33 @@ class HospitalFileSpec:
 
 
 HOSPITAL_FILES: list[HospitalFileSpec] = [
-    # ccn: replace each "TODO" with the Facility ID from hospital_general_information
-    # (run ingestion.ccn_lookup.find_ccns). Keep it a string so leading zeros survive.
+   
     HospitalFileSpec(
         key="vumc_mrf",
         hospital_name="Vanderbilt University Medical Center",
-        ccn="TODO",
+        ccn="440039",
         url="https://finance.vumc.org/assets/pub/pt/352528741_vanderbilt-university-medical-center_standardcharges.json",
         file_format="json",   # file can exceed 1 GB; raise CMS_MAX_FILE_BYTES if needed
     ),
     HospitalFileSpec(
         key="sthss_mrf",
         hospital_name="Saint Thomas Hospital for Specialty Surgery",
-        ccn="TODO",            # may not exist in CMS data; see DECISIONS.md
-        url="https://mrfs.hyvehealthcare.com/USPI/621772195_baptist-womens-health-center-llc_standardcharges.json",
+        ccn="440218",            # may not exist in CMS data; see DECISIONS.md
+        url="https://mrfs.hyvehealthcare.com/USPI/621772440_st-thomas-hospital-for-specialty-surgery_standardcharges.json",
         file_format="json",
     ),
     HospitalFileSpec(
-        key="ast_rutherford_mrf",
+        key="struth_mrf",
         hospital_name="Ascension Saint Thomas Rutherford",
-        ccn="TODO",
+        ccn="440053",
         url="https://healthcare.ascension.org/-/media/project/ascension/healthcare/price-transparency-files/tn-csv/620475842_saint-thomas-rutherford-hospital_standardcharges.csv",
         file_format="csv",
     ),
     HospitalFileSpec(
-        key="williamson_mrf",
+        key="wmc_mrf",
         hospital_name="Williamson Medical Center",
-        ccn="TODO",
-        url="TODO_PASTE_THE_URL_YOU_TESTED",   # I could not capture the direct link
+        ccn="440029",
+        url="https://williamsonhealth.org/content/uploads/2026/08/621501534_williamson-medical-center_standardcharges.csv",   # I could not capture the direct link
         file_format="csv",     # set to the format of the file you tested (csv | json | zip)
     ),
 ]
