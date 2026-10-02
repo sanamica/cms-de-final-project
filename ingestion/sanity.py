@@ -44,7 +44,7 @@ class SanityCheckError(Exception):
 
 def _manifest_rows(spark, run_id: str, key: str) -> list[dict]:
     query = (
-        "SELECT status, page_number, row_count, error_message, landing_path, file_bytes, sha256 "
+        "SELECT status, page_number, row_count, error_message, landing_path, file_bytes, sha256, note "
         f"FROM {config.MANIFEST_TABLE} WHERE run_id = '{run_id}' AND dataset_key = '{key}'"
     )
     return [r.asDict() if hasattr(r, "asDict") else dict(r) for r in spark.sql(query).collect()]
@@ -177,11 +177,15 @@ def check_hospital_file(spark, run_id: str, spec: HospitalFileSpec, verify_check
     rows = _manifest_rows(spark, run_id, spec.key)
     results = _event_checks(rows)
 
-    done = [r for r in rows if r["status"] == "succeeded"]
+    done = [r for r in rows if r["status"] in ("succeeded", "skipped")]
     if len(done) != 1:
-        results.append(CheckResult("one_succeeded_row", FAIL, f"expected 1 succeeded row, found {len(done)}"))
+        results.append(CheckResult("one_succeeded_row", FAIL,
+                                   f"expected 1 succeeded or skipped row, found {len(done)}"))
         return results
     row = done[0]
+    if row["status"] == "skipped":
+        results.append(CheckResult("download_or_skip", PASS,
+                                   f"skipped ({row.get('note')}); existing file re-verified below"))
     path = row["landing_path"]
     if not path or not os.path.exists(path):
         results.append(CheckResult("file_exists", FAIL, f"{path} is not in the Volume"))

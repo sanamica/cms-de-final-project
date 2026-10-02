@@ -28,6 +28,10 @@ VOLUME_ROOT = f"/Volumes/{CATALOG}/{BRONZE_SCHEMA}/{LANDING_VOLUME}"
 # table, not a file, so you can query it directly in SQL/Metabase.
 MANIFEST_TABLE = f"{CATALOG}.{BRONZE_SCHEMA}.ingestion_manifest"
 
+# Page-level manifest events are written to Delta in batches of this many rows,
+# not one write per page (each Delta write costs a second or two).
+MANIFEST_BATCH_SIZE = int(os.environ.get("CMS_MANIFEST_BATCH_SIZE", 25))
+
 
 # ---------------------------------------------------------------------------
 # API endpoints
@@ -124,58 +128,43 @@ DATASETS: list[DatasetSpec] = [
 class HospitalFileSpec:
     key: str              # short name used in landing path + manifest, e.g. "vumc_mrf"
     hospital_name: str
-    system: str
-    state: str
     ccn: str              # CMS Certification Number (6 chars, keep as string!)
     url: str              # direct download URL of the machine-readable file
     file_format: str      # "csv" | "json" | "zip"
-    source_type: str      # "direct_mrf"
     min_bytes: int = 10_000   # sanity check: fail if the landed file is smaller than this
 
 
 HOSPITAL_FILES: list[HospitalFileSpec] = [
-    # Fill in one entry per Nashville-area hospital after you have confirmed the
-    # direct file URL on the hospital's price transparency page. Example shape:
-   HospitalFileSpec(
+    # ccn: replace each "TODO" with the Facility ID from hospital_general_information
+    # (run ingestion.ccn_lookup.find_ccns). Keep it a string so leading zeros survive.
+    HospitalFileSpec(
         key="vumc_mrf",
         hospital_name="Vanderbilt University Medical Center",
-        system="Vanderbilt",
-        state="TN",
-        ccn="440039",
+        ccn="TODO",
         url="https://finance.vumc.org/assets/pub/pt/352528741_vanderbilt-university-medical-center_standardcharges.json",
-        file_format="json",
-        source_type="direct_mrf"
+        file_format="json",   # file can exceed 1 GB; raise CMS_MAX_FILE_BYTES if needed
     ),
     HospitalFileSpec(
         key="sthss_mrf",
         hospital_name="Saint Thomas Hospital for Specialty Surgery",
-        system="Ascension",
-        state="TN",
-        ccn="440218",
-        url="https://mrfs.hyvehealthcare.com/USPI/621772440_st-thomas-hospital-for-specialty-surgery_standardcharges.json",
+        ccn="TODO",            # may not exist in CMS data; see DECISIONS.md
+        url="https://mrfs.hyvehealthcare.com/USPI/621772195_baptist-womens-health-center-llc_standardcharges.json",
         file_format="json",
-        source_type="direct_mrf"
     ),
     HospitalFileSpec(
-        key="struth_mrf",
+        key="ast_rutherford_mrf",
         hospital_name="Ascension Saint Thomas Rutherford",
-        system="Ascension",
-        state="TN",
-        ccn="440053",
+        ccn="TODO",
         url="https://healthcare.ascension.org/-/media/project/ascension/healthcare/price-transparency-files/tn-csv/620475842_saint-thomas-rutherford-hospital_standardcharges.csv",
         file_format="csv",
-        source_type="direct_mrf"
     ),
     HospitalFileSpec(
-        key="wmc_mrf",
+        key="williamson_mrf",
         hospital_name="Williamson Medical Center",
-        system="Williamson Health",
-        state="TN",
-        ccn="440029",
-        url="https://williamsonhealth.org/content/uploads/2026/08/621501534_williamson-medical-center_standardcharges.csv",
-        file_format="csv",
-        source_type="direct_mrf"
-    )
+        ccn="TODO",
+        url="TODO_PASTE_THE_URL_YOU_TESTED",   # I could not capture the direct link
+        file_format="csv",     # set to the format of the file you tested (csv | json | zip)
+    ),
 ]
 
 
@@ -186,7 +175,10 @@ class FileDownloadConfig:
     connect_timeout_seconds: float = 30.0
     read_timeout_seconds: float = 300.0
     chunk_bytes: int = 1024 * 1024                 # stream in 1 MiB chunks
-    max_bytes: int = int(os.environ.get("CMS_MAX_FILE_BYTES", 2 * 1024**3))  # safety cap
+    max_bytes: int = int(os.environ.get("CMS_MAX_FILE_BYTES", 5 * 1024**3))  # safety cap
+    # Skip re-downloading an unchanged price file, but always refresh after this many days
+    # as insurance against a server that reports "unchanged" incorrectly.
+    max_age_days: int = int(os.environ.get("CMS_MAX_FILE_AGE_DAYS", 30))
     # Some hospital sites return 403 to non-browser User-Agents.
     user_agent: str = "Mozilla/5.0 (compatible; nss-de-final-project/1.0)"
     retry: RetryConfig = field(default_factory=RetryConfig)

@@ -26,7 +26,7 @@ from pyspark.sql.types import (
     IntegerType,
 )
 
-from .config import MANIFEST_TABLE
+from .config import MANIFEST_BATCH_SIZE, MANIFEST_TABLE
 
 MANIFEST_SCHEMA = StructType(
     [
@@ -35,7 +35,7 @@ MANIFEST_SCHEMA = StructType(
         StructField("source", StringType(), False),       # cms_data_api | provider_data_catalog | hospital_price_file
         StructField("page_number", IntegerType(), True),
         StructField("row_count", IntegerType(), True),
-        StructField("status", StringType(), False),        # started | succeeded | failed
+        StructField("status", StringType(), False),        # started | succeeded | failed | skipped
         StructField("error_message", StringType(), True),
         StructField("landing_path", StringType(), True),
         StructField("event_ts", TimestampType(), False),
@@ -43,11 +43,17 @@ MANIFEST_SCHEMA = StructType(
         # what ALTER TABLE ... ADD COLUMNS produces on an existing table.
         StructField("file_bytes", LongType(), True),
         StructField("sha256", StringType(), True),
+        StructField("etag", StringType(), True),
+        StructField("last_modified", StringType(), True),
+        StructField("note", StringType(), True),
     ]
 )
 
 # Columns added after the table was first created (name -> SQL type).
-_ADDED_COLUMNS = {"file_bytes": "BIGINT", "sha256": "STRING"}
+_ADDED_COLUMNS = {
+    "file_bytes": "BIGINT", "sha256": "STRING",
+    "etag": "STRING", "last_modified": "STRING", "note": "STRING",
+}
 
 
 def new_run_id() -> str:
@@ -75,8 +81,7 @@ def _table_exists(spark: SparkSession, table_name: str) -> bool:
         return False
 
 
-def log_event(
-    spark: SparkSession,
+def _row(
     run_id: str,
     dataset_key: str,
     source: str,
@@ -87,26 +92,71 @@ def log_event(
     landing_path: str | None = None,
     file_bytes: int | None = None,
     sha256: str | None = None,
-) -> None:
-    """Append a single manifest event. Called for every page, plus run
-    start/end, so the manifest table doubles as an audit log and a
-    dashboard source ("which hospitals failed, and why")."""
-    row = [
-        (
-            run_id,
-            dataset_key,
-            source,
-            page_number,
-            row_count,
-            status,
-            error_message,
-            landing_path,
-            datetime.now(timezone.utc),
-            file_bytes,
-            sha256,
-        )
-    ]
-    spark.createDataFrame(row, MANIFEST_SCHEMA).write.format("delta").mode("append").saveAsTable(MANIFEST_TABLE)
+    etag: str | None = None,
+    last_modified: str | None = None,
+    note: str | None = None,
+) -> tuple:
+    """One manifest row, in MANIFEST_SCHEMA column order. event_ts is stamped now,
+    i.e. when the event happened, even if the row is written to Delta later."""
+    return (
+        run_id, dataset_key, source, page_number, row_count, status, error_message,
+        landing_path, datetime.now(timezone.utc), file_bytes, sha256, etag, last_modified, note,
+    )
+
+
+def _write_rows(spark: SparkSession, rows: list[tuple]) -> None:
+    spark.createDataFrame(rows, MANIFEST_SCHEMA).write.format("delta").mode("append").saveAsTable(MANIFEST_TABLE)
+
+
+def log_event(spark: SparkSession, run_id: str, dataset_key: str, source: str, status: str, **fields) -> None:
+    """Append a single manifest event immediately. Use for run-level events
+    (started, skipped, price-file outcomes). For many page events, use EventBuffer.
+
+    `fields` may include page_number, row_count, error_message, landing_path,
+    file_bytes, sha256, etag, last_modified, note."""
+    _write_rows(spark, [_row(run_id, dataset_key, source, status, **fields)])
+
+
+class EventBuffer:
+    """Collects manifest events in memory and writes them in batches.
+
+    One Delta append per page made CMS ingestion slow (about 2 seconds per page).
+    Buffering cuts that to one append per `batch_size` events plus one final
+    flush. Always call flush() in a `finally:` so events are written even if the
+    run fails or is interrupted.
+
+    Tradeoff: if the process is killed outright (not a normal exception or
+    interrupt), up to batch_size - 1 buffered events are lost, even though their
+    page files are on disk. The sanity checks flag that as a gap or stale file.
+    """
+
+    def __init__(self, spark: SparkSession, batch_size: int | None = None):
+        self.spark = spark
+        self.batch_size = batch_size or MANIFEST_BATCH_SIZE
+        self._rows: list[tuple] = []
+
+    def add(self, run_id: str, dataset_key: str, source: str, status: str, **fields) -> None:
+        self._rows.append(_row(run_id, dataset_key, source, status, **fields))
+        if len(self._rows) >= self.batch_size:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._rows:
+            return
+        _write_rows(self.spark, self._rows)   # keep the rows if the write raises
+        self._rows = []
+
+
+def last_download(spark: SparkSession, dataset_key: str) -> dict | None:
+    """The most recent successful download of a price file (the file bronze should
+    read), or None if it has never been downloaded. Skipped runs are not downloads."""
+    rows = spark.sql(
+        "SELECT landing_path, file_bytes, sha256, etag, last_modified, event_ts "
+        f"FROM {MANIFEST_TABLE} WHERE dataset_key = '{dataset_key}' "
+        "AND source = 'hospital_price_file' AND status = 'succeeded' "
+        "ORDER BY event_ts DESC LIMIT 1"
+    ).collect()
+    return rows[0].asDict() if rows else None
 
 
 def run_summary(spark: SparkSession, run_id: str):

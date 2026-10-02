@@ -25,13 +25,12 @@ from datetime import date
 
 import httpx
 
-from . import ingestion_checks as sanity
-
+from . import sanity
 from .cms_data_api import fetch_dataset_pages as fetch_cms_data_pages
 from .config import DATASETS, FILES, HOSPITAL_FILES, VOLUME_ROOT, DatasetSpec, HospitalFileSpec
-from .hospital_files import download_hospital_file
+from .hospital_files import SkipDecision, decide_skip, download_hospital_file
 from .http_client import RetryableRequestError
-from .manifest import ensure_manifest_table, log_event, new_run_id, run_summary
+from .manifest import EventBuffer, ensure_manifest_table, last_download, log_event, new_run_id, run_summary
 from .provider_data_catalog import fetch_dataset_pages as fetch_provider_pages
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -67,43 +66,47 @@ def ingest_dataset(client: httpx.Client, spark, run_id: str, spec: DatasetSpec) 
     else:
         raise ValueError(f"Unknown source '{spec.source}' for dataset '{spec.key}'")
 
+    # Page events are buffered and written in batches (one Delta write per page
+    # was the slowest part of CMS ingestion). The finally block guarantees the
+    # buffer is written even if this dataset fails or the run is interrupted.
+    buffer = EventBuffer(spark)
     total_rows = 0
     try:
-        for page_number, rows in page_iter:
-            try:
-                file_path = _write_page(landing_dir, page_number, rows)
-                log_event(
-                    spark, run_id, spec.key, spec.source,
-                    status="succeeded", page_number=page_number,
-                    row_count=len(rows), landing_path=file_path,
-                )
-                total_rows += len(rows)
-            except Exception as page_exc:
-                # A single bad page doesn't kill the dataset — log and continue.
-                logger.exception("Failed writing page %s for %s", page_number, spec.key)
-                log_event(
-                    spark, run_id, spec.key, spec.source,
-                    status="failed", page_number=page_number,
-                    error_message=str(page_exc),
-                )
-    except RetryableRequestError as exc:
-        # Retries were exhausted for a page fetch itself (not a write failure).
-        logger.error("Exhausted retries fetching %s: %s", spec.key, exc)
-        log_event(
-            spark, run_id, spec.key, spec.source,
-            status="failed", error_message=str(exc),
-        )
-        return
-    except Exception as exc:
-        # Anything else raised while fetching: a non-retryable HTTP error (e.g.
-        # 404 for a bad dataset ID, which http_client re-raises immediately),
-        # invalid JSON, or a protocol error. Log it and let the run continue.
-        logger.exception("Unexpected error fetching %s", spec.key)
-        log_event(
-            spark, run_id, spec.key, spec.source,
-            status="failed", error_message=f"{type(exc).__name__}: {exc}",
-        )
-        return
+        try:
+            for page_number, rows in page_iter:
+                try:
+                    file_path = _write_page(landing_dir, page_number, rows)
+                    buffer.add(
+                        run_id, spec.key, spec.source,
+                        status="succeeded", page_number=page_number,
+                        row_count=len(rows), landing_path=file_path,
+                    )
+                    total_rows += len(rows)
+                except Exception as page_exc:
+                    # A single bad page doesn't kill the dataset — log and continue.
+                    logger.exception("Failed writing page %s for %s", page_number, spec.key)
+                    buffer.add(
+                        run_id, spec.key, spec.source,
+                        status="failed", page_number=page_number,
+                        error_message=str(page_exc),
+                    )
+        except RetryableRequestError as exc:
+            # Retries were exhausted for a page fetch itself (not a write failure).
+            logger.error("Exhausted retries fetching %s: %s", spec.key, exc)
+            buffer.add(run_id, spec.key, spec.source, status="failed", error_message=str(exc))
+            return
+        except Exception as exc:
+            # Anything else raised while fetching: a non-retryable HTTP error (e.g.
+            # 404 for a bad dataset ID, which http_client re-raises immediately),
+            # invalid JSON, or a protocol error. Log it and let the run continue.
+            logger.exception("Unexpected error fetching %s", spec.key)
+            buffer.add(
+                run_id, spec.key, spec.source,
+                status="failed", error_message=f"{type(exc).__name__}: {exc}",
+            )
+            return
+    finally:
+        buffer.flush()
 
     logger.info("Finished dataset=%s total_rows=%s landing_dir=%s", spec.key, total_rows, landing_dir)
 
@@ -111,10 +114,33 @@ def ingest_dataset(client: httpx.Client, spark, run_id: str, spec: DatasetSpec) 
 HOSPITAL_FILE_SOURCE = "hospital_price_file"
 
 
-def ingest_hospital_file(client: httpx.Client, spark, run_id: str, spec: HospitalFileSpec) -> None:
-    """Download one hospital price file and log the outcome to the manifest.
+def ingest_hospital_file(client: httpx.Client, spark, run_id: str, spec: HospitalFileSpec,
+                         force_download: bool = False) -> None:
+    """Download one hospital price file (unless it is unchanged) and log the outcome.
+
+    If the server's file is unchanged since our last successful download, nothing is
+    downloaded: a 'skipped' row is logged that points at the existing file. The skip
+    check can never break a run: if it errors, we simply download.
     download_hospital_file never raises, so one bad hospital can't stop the run."""
     log_event(spark, run_id, spec.key, HOSPITAL_FILE_SOURCE, status="started")
+
+    prev = None
+    try:
+        prev = last_download(spark, spec.key)
+        decision = decide_skip(spec, client, prev, force=force_download)
+    except Exception as exc:  # noqa: BLE001 - fall back to downloading
+        logger.warning("Skip check failed for %s (%s); downloading instead", spec.key, exc)
+        decision = SkipDecision(False, f"skip check failed: {type(exc).__name__}")
+
+    if decision.skip:
+        log_event(
+            spark, run_id, spec.key, HOSPITAL_FILE_SOURCE, status="skipped",
+            landing_path=prev["landing_path"], file_bytes=prev["file_bytes"], sha256=prev["sha256"],
+            etag=prev.get("etag"), last_modified=prev.get("last_modified"), note=decision.reason,
+        )
+        logger.info("Skipping %s: %s", spec.key, decision.reason)
+        return
+
     result = download_hospital_file(spec, client, run_id)
     log_event(
         spark, run_id, spec.key, HOSPITAL_FILE_SOURCE,
@@ -123,13 +149,17 @@ def ingest_hospital_file(client: httpx.Client, spark, run_id: str, spec: Hospita
         landing_path=result.path,
         file_bytes=result.bytes_written if result.status == "succeeded" else None,
         sha256=result.sha256,
+        etag=result.etag,
+        last_modified=result.last_modified,
+        note=f"downloaded: {decision.reason}",
     )
     logger.info("Hospital file key=%s status=%s bytes=%s", spec.key, result.status, result.bytes_written)
 
 
 def main(spark, datasets: list[DatasetSpec] | None = None,
          hospital_files: list[HospitalFileSpec] | None = None,
-        run_checks: bool = True, verify_checksum: bool = True) -> str:
+         run_checks: bool = True, verify_checksum: bool = True,
+         force_download: bool = False) -> str:
     """
     `spark` is the active SparkSession — in a Databricks notebook this is
     just the `spark` global already in scope; pass it explicitly here so
@@ -140,10 +170,13 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
     `main(spark, datasets=[], hospital_files=config.HOSPITAL_FILES[:1])`.
 
     After ingesting, a sanity report is printed for every source (see
-    ingestion_checks.py). If any check FAILS, a SanityCheckError is raised so a Job
+    sanity.py). If any check FAILS, a SanityCheckError is raised so a Job
     task shows as failed; the run_id is in the message. Pass
     `verify_checksum=False` to skip re-reading large files, or
     `run_checks=False` to skip the checks entirely.
+
+    Price files that have not changed since the last download are skipped
+    (see hospital_files.decide_skip). Pass `force_download=True` to re-download all.
     """
     datasets = DATASETS if datasets is None else datasets
     hospital_files = HOSPITAL_FILES if hospital_files is None else hospital_files
@@ -174,7 +207,7 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
         with httpx.Client(headers={"User-Agent": FILES.user_agent}) as file_client:
             for spec in hospital_files:
                 started = time.monotonic()
-                ingest_hospital_file(file_client, spark, run_id, spec)
+                ingest_hospital_file(file_client, spark, run_id, spec, force_download)
                 timings[spec.key] = time.monotonic() - started
 
     logger.info("Run %s complete. Summary:", run_id)
@@ -188,7 +221,7 @@ def main(spark, datasets: list[DatasetSpec] | None = None,
     if run_checks:
         failures = _run_sanity_checks(spark, run_id, [*datasets, *hospital_files], verify_checksum)
         if failures:
-            raise sanity.SanityCheckError(f"run_id={run_id}: " + "; ".join(failures)) 
+            raise sanity.SanityCheckError(f"run_id={run_id}: " + "; ".join(failures))
     return run_id
 
 
@@ -203,7 +236,7 @@ def _run_sanity_checks(spark, run_id: str, specs: list, verify_checksum: bool) -
             failures.append(f"{spec.key}: {', '.join(failed)}")
     return failures
 
-    
+
 if __name__ == "__main__":
     # For Job-cluster execution: `spark` is provided by the Databricks
     # runtime as a global even in a plain .py entry point run as a Job task.
