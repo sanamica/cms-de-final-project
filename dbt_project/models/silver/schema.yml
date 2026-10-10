@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: silver_negotiated_rates
+    description: >
+      One row per hospital, billing code, setting, payer and plan from the four price files, with
+      every rate type kept (dollar, percentage, algorithm) so exclusions can be counted. By default
+      only the hip/knee codes in the procedure_codes seed are kept (var procedure_scope).
+    columns:
+      - name: hospital_ccn
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('hospital_crosswalk')
+                field: hospital_ccn
+      - name: code
+        data_tests: [not_null]
+      - name: file_last_updated_on
+        data_tests: [not_null]
+      - name: rate_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['dollar', 'percentage', 'algorithm', 'none']
+    data_tests:
+      # Real files can repeat a code/payer/plan on separate lines, so this is a warning, not a failure.
+      - unique_combination:
+          arguments:
+            columns: [source_key, code_type, code, item_codes, modifiers, setting, billing_class, payer_name, plan_name, item_description]
+          config:
+            severity: warn
+
+  - name: stg_price_file_headers
+    description: One row per price file with its last-updated date, as stated in the file's own header.
+    columns:
+      - name: source_key
+        data_tests: [not_null, unique]
+      - name: last_updated_on
+        data_tests: [not_null]
+
+  - name: stg_cms_hospitals
+    columns:
+      - name: hospital_ccn
+        data_tests: [not_null]
+
+  - name: stg_cms_outcomes
+    columns:
+      - name: hospital_ccn
+        data_tests: [not_null, unique]
+
+seeds:
+  - name: hospital_crosswalk
+    columns:
+      - name: source_key
+        data_tests: [not_null, unique]
+      - name: hospital_ccn
+        data_tests:
+          - not_null
+          - unique
+          # Warn if a CCN is missing from CMS Hospital General Information.
+          - relationships:
+              arguments:
+                to: ref('stg_cms_hospitals')
+                field: hospital_ccn
+              config:
+                severity: warn
+  - name: procedure_codes
+    columns:
+      - name: code
+        data_tests: [not_null]

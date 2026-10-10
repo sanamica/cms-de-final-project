@@ -32,7 +32,7 @@ env/
 target/
 dbt_packages/
 logs/
-.user.yml
+.yml
 
 # --- Jupyter / notebook checkpoints ---
 .ipynb_checkpoints/
@@ -50,3 +50,4 @@ data/landing/
 
 # --- Logs ---
 *.log
+.md

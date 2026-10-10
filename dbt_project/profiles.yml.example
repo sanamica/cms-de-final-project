@@ -1,0 +1,13 @@
+# Copy to ~/.dbt/profiles.yml (do NOT commit the real file). Credentials come from
+# environment variables so no secret ever lives in the repo.
+cms_hospital_pricing:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      catalog: main
+      schema: silver                      # default; models set their own schema
+      host: "{{ env_var('DATABRICKS_HOST') }}"            # e.g. dbc-xxxxxxxx-xxxx.cloud.databricks.com (no https://)
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH', '/sql/1.0/warehouses/bbbaa059d4e4e4f6') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+      threads: 2                          # the starter warehouse is 2X-Small

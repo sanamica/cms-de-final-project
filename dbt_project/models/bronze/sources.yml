@@ -1,0 +1,33 @@
+version: 2
+
+# Bronze tables are created by the Python bronze load (ingestion/bronze_load.py), not by dbt.
+sources:
+  - name: bronze
+    database: main
+    schema: bronze
+    description: Raw, as-is loads of the CMS datasets and the four hospital price files.
+    tables:
+      - name: hospital_general_information
+        columns:
+          - name: facility_id
+            data_tests: [not_null, unique]
+      - name: unplanned_hospital_visits
+      - name: complications_and_deaths
+      - name: hrrp_readmissions_reduction
+      - name: vumc_mrf
+        description: One row per price file item; the item is in raw_json.
+        columns:
+          - name: raw_json
+            data_tests: [not_null]
+      - name: sthss_mrf
+        columns:
+          - name: raw_json
+            data_tests: [not_null]
+      - name: struth_mrf
+        description: Tall CSV, one row per item and payer/plan.
+      - name: wmc_mrf
+        description: Wide CSV, one row per item, with a column set for each payer/plan.
+      - name: vumc_mrf_header
+      - name: sthss_mrf_header
+      - name: struth_mrf_header
+      - name: wmc_mrf_header

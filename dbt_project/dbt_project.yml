@@ -1,0 +1,41 @@
+name: cms_hospital_pricing
+version: "1.0.0"
+config-version: 2
+profile: cms_hospital_pricing
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+vars:
+  # Which procedures silver keeps: 'featured' (default: only the hip/knee codes in the
+  # procedure_codes seed) or 'all' (every procedure; much larger and slower).
+  procedure_scope: featured
+  # Billing code types kept in silver when procedure_scope is 'all'. Hospital-local types
+  # (CDM, RC, LOCAL...) cannot be compared across hospitals. Use 'all' to keep every type.
+  silver_code_types: ["CPT", "HCPCS", "MS-DRG"]
+  # Code types gold compares across hospitals.
+  comparable_code_types: ["CPT", "HCPCS", "MS-DRG"]
+  # Dollar rates below this are treated as placeholders (for example $0.01) and excluded from stats.
+  min_plausible_rate: 1
+
+models:
+  cms_hospital_pricing:
+    silver:
+      +schema: silver
+      +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table
+
+seeds:
+  cms_hospital_pricing:
+    +schema: silver
+    hospital_crosswalk:
+      +column_types:
+        hospital_ccn: string
+        assumed_billing_class: string
+    procedure_codes:
+      +column_types:
+        code: string

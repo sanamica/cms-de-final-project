@@ -146,7 +146,7 @@ HOSPITAL_FILES: list[HospitalFileSpec] = [
     HospitalFileSpec(
         key="sthss_mrf",
         hospital_name="Saint Thomas Hospital for Specialty Surgery",
-        ccn="440218",            # may not exist in CMS data; see DECISIONS.md
+        ccn="440218",            
         url="https://mrfs.hyvehealthcare.com/USPI/621772195_baptist-womens-health-center-llc_standardcharges.json",
         file_format="json",
     ),

@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: dim_hospital
+    description: >
+      Hospital dimension, one row per hospital in the project: price file identity, CMS general
+      information, and whether CMS outcome measures exist for it.
+    columns:
+      - name: hospital_ccn
+        data_tests: [not_null, unique]
+      - name: source_key
+        data_tests: [not_null, unique]
+      - name: in_cms_general_info
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+  - name: gold_price_variation
+    description: Dollar-rate spread per hospital, code and setting, with counts of excluded rate types.
+    columns:
+      - name: hospital_ccn
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hospital')
+                field: hospital_ccn
+      - name: n_dollar_rates
+        data_tests: [not_null]
+  - name: gold_price_variation_across_hospitals
+    description: Between-hospital spread of median dollar rates for the same code and setting.
+    columns:
+      - name: n_hospitals
+        data_tests: [not_null]
+  - name: gold_price_vs_readmission
+    description: Hip/knee price per hospital next to its CMS 30-day readmission measure.
+    columns:
+      - name: hospital_ccn
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_hospital')
+                field: hospital_ccn
