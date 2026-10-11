@@ -23,10 +23,11 @@ long as (
 select
     'wmc_mrf' as source_key,
     description as item_description,
-    concat_ws('|',
+        concat_ws('|', array_sort(array_distinct(array(
         {%- for i in [1, 2, 3, 4] %}
         case when nullif(trim(`code|{{ i }}`), '') is not null then concat(upper(`code|{{ i }}|type`), ':', `code|{{ i }}`) end{{ ',' if not loop.last }}
-        {%- endfor %}) as item_codes,
+        {%- endfor %}
+    )))) as item_codes,
     nullif(trim(modifiers), '') as modifiers,
     code, code_type, procedure_label,
     setting, billing_class, payer_name, plan_name,

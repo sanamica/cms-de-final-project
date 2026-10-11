@@ -15,7 +15,7 @@ sources:
       - name: complications_and_deaths
       - name: hrrp_readmissions_reduction
       - name: vumc_mrf
-        description: One row per price file item; the item is in raw_json.
+        description: Tall CSV, one row per item and payer/plan.
         columns:
           - name: raw_json
             data_tests: [not_null]

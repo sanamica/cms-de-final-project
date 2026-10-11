@@ -140,8 +140,8 @@ HOSPITAL_FILES: list[HospitalFileSpec] = [
         key="vumc_mrf",
         hospital_name="Vanderbilt University Medical Center",
         ccn="440039",
-        url="https://finance.vumc.org/assets/pub/pt/352528741_vanderbilt-university-medical-center_standardcharges.json",
-        file_format="json",   # file can exceed 1 GB; raise CMS_MAX_FILE_BYTES if needed
+        url="https://finance.vumc.org/assets/pub/pt/352528741_vanderbilt-university-medical-center_standardcharges.csv",
+        file_format="csv",
     ),
     HospitalFileSpec(
         key="sthss_mrf",

@@ -170,7 +170,7 @@ def _stage_csv(src: str, staging: str):
         line1, line2 = fin.readline(), fin.readline()
         data_start = fin.tell()
         header_line = fin.readline()
-        if not line1.lstrip(b"\xef\xbb\xbf").lower().startswith(b"hospital_name") \
+        if not line1.lstrip(b"\xef\xbb\xbf").lstrip(b'"').lower().startswith(b"hospital_name") \
                 or b"description" not in header_line.lower():
             raise BronzeLoadError(
                 f"{os.path.basename(src)} does not have the expected layout: two metadata lines "
