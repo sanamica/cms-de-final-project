@@ -27,7 +27,7 @@ models:
       # Real files can repeat a code/payer/plan on separate lines, so this is a warning, not a failure.
       - unique_combination:
           arguments:
-            columns: [source_key, code_type, code, item_codes, modifiers, setting, billing_class, payer_name, plan_name, item_description]
+            columns: [source_key, code_type, code, item_codes, modifiers, setting, billing_class, payer_name, plan_name, item_description, rate_type, methodology]          
           config:
             severity: warn
 

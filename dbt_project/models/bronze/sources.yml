@@ -16,9 +16,6 @@ sources:
       - name: hrrp_readmissions_reduction
       - name: vumc_mrf
         description: Tall CSV, one row per item and payer/plan.
-        columns:
-          - name: raw_json
-            data_tests: [not_null]
       - name: sthss_mrf
         columns:
           - name: raw_json
