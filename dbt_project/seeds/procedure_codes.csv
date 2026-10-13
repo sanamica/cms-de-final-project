@@ -1,0 +1,7 @@
+code_type,code,procedure_label,description
+CPT,27130,HIP,Total hip arthroplasty
+CPT,27447,KNEE,Total knee arthroplasty
+HCPCS,27130,HIP,Total hip arthroplasty
+HCPCS,27447,KNEE,Total knee arthroplasty
+MS-DRG,469,HIP_KNEE_DRG,Major joint replacement or reattachment of lower extremity with MCC
+MS-DRG,470,HIP_KNEE_DRG,Major joint replacement or reattachment of lower extremity without MCC

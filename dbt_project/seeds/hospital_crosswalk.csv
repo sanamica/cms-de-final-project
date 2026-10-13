@@ -1,0 +1,5 @@
+source_key,hospital_ccn,hospital_name,assumed_billing_class
+vumc_mrf,440039,Vanderbilt University Medical Center,
+sthss_mrf,440218,Saint Thomas Hospital for Specialty Surgery,
+struth_mrf,440053,Ascension Saint Thomas Rutherford,facility
+wmc_mrf,440029,Williamson Medical Center,

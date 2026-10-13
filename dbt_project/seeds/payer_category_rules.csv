@@ -1,0 +1,8 @@
+priority,category,pattern,note
+1,other_government,va ccn|va pccc|optum va|triwest|tricare|military|covid uninsured,VA and military programs and the COVID uninsured fund
+2,exchange,exchange|ambetter|oscar|marketplace,ACA marketplace plans
+2,exchange,network e( |$),BCBS Network E is the ACA exchange network - verify
+3,medicare_advantage,medicare|advantage|snp|aarp|windsor health,Medicare Advantage and special needs plans
+3,medicare_advantage,amerivantage,Assumed Medicare Advantage (Wellpoint Amerivantage) - verify
+4,medicaid,tenncare|medicaid|community plan|community state|coverkids|better health|passport|community care|mcaid,TennCare and other Medicaid managed care
+4,medicaid,bluecare|bluegrass family health,BlueCare is BCBST TennCare and Bluegrass Family Health is a Kentucky Medicaid plan
