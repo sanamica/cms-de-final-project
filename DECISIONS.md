@@ -156,10 +156,18 @@ Databricks Git folder.
 - **Code family (Decided).** Hospitals label the same code differently: VUMC lists CPT 27130 and 27447
   as HCPCS, the others as CPT. Silver adds `code_family` (CPT and HCPCS together), and gold compares by
   it; otherwise VUMC sat alone in its own group and could not be compared.
-- **Payer mix (open).** A hospital's median across all payers depends on how many Medicaid and Medicare
+- **Payer categories (built).** A hospital's median across all payers depends on how many Medicaid and Medicare
   Advantage plans it lists, because those pay far less than commercial plans (Specialty Surgery's rates
-  run from $584 for a TennCare plan to $21,687 for commercial). Comparing hospitals fairly needs payer
-  categories, which the payer-variation question needs anyway.
+  run from $584 for a TennCare plan to $21,687 for commercial), so a hospital's overall median is not a
+  fair price to compare. Each payer/plan is sorted into commercial, exchange, Medicare Advantage,
+  Medicaid, or other government by keyword rules in a seed (`payer_category_rules.csv`); names that match
+  no rule default to commercial and are flagged (`payer_category_is_default`). On the real payer list,
+  41 hand-checked names all landed in the intended category; about 40% of dollar-rate lines are
+  commercial by default, so the rules should be reviewed if commercial results look off. The
+  `Amerivantage` rule (Medicare Advantage) is an assumption. Three new gold models use the categories:
+  `gold_price_by_payer_category`, `gold_hospital_comparison_by_payer_category` (Question 1 within
+  commercial plans only), and `gold_payer_category_gap` (Question 2: each category's median against the
+  commercial median, per hospital and service).
 - **Rate types (Decided).** The main comparison uses **dollar rates only**. Percentage and algorithm
   rates stay in silver but are excluded from the statistics and counted per hospital and code, and
   placeholder dollar rates (under $1, such as $0.01) are excluded and counted too. Converting
@@ -224,7 +232,7 @@ Job definition JSON to the repo; set the schedule early enough to build run hist
 
 ## Open items
 
-- [ ] Build payer categories (seed of keyword rules) and compare hospitals within commercial plans only
+- [ ] Review the payer categories on the real data (`payer_category_is_default` rows) and the new gold models' results
 - [ ] Note VUMC's dollar coverage on the dashboard: CPT facility rates are all dollars (29 per code), but about 58% of its DRG 469/470 lines are algorithm text (57 dollar of 142)
 - [ ] Choose the second question (payer variation, or a readmission ranking); if no readmission ranking, drop the HRRP file
 - [ ] Source terms, URLs, and update frequency (Decision 1 table)

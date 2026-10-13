@@ -36,6 +36,8 @@ select
     (nullif(trim(u.billing_class), '') is null and nullif(trim(x.assumed_billing_class), '') is not null) as billing_class_assumed,
     trim(u.payer_name)                                   as payer_name,
     trim(u.plan_name)                                    as plan_name,
+    pc.payer_category,
+    pc.payer_category_is_default,
     case
         when u.negotiated_dollar is not null     then 'dollar'
         when u.negotiated_percentage is not null then 'percentage'
