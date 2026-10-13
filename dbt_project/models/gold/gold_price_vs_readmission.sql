@@ -4,7 +4,7 @@ select
     v.hospital_ccn,
     v.hospital_name,
     v.procedure_label,
-    v.code_type,
+    v.code_family,
     v.code,
     v.setting,
     v.billing_class,

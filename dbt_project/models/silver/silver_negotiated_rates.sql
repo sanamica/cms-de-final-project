@@ -22,6 +22,7 @@ select
     x.hospital_ccn,
     x.hospital_name,
     u.code_type,
+    case when upper(u.code_type) in ('CPT', 'HCPCS') then 'CPT/HCPCS' else upper(u.code_type) end as code_family,
     u.code,
     u.procedure_label,
     (u.procedure_label is not null)                      as is_featured,
