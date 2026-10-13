@@ -2,8 +2,10 @@
 -- fees are never pooled). DOLLAR rates drive every statistic; percentage, algorithm and placeholder
 -- rates are excluded but counted so the exclusion is visible.
 --
--- Each payer/plan is first collapsed to ONE rate (the median of its dollar lines), so a payer that a
--- file lists on several lines does not weigh more than a payer listed once.
+-- Each payer/plan is first collapsed to ONE rate, so a payer that a file lists on several lines does not
+-- weigh more than a payer listed once. The rate is the median of its lines WITHOUT a billing modifier
+-- (a modifier marks a variant of the procedure, such as a reduced or discontinued service, which pays
+-- very differently); if a payer/plan only has modified lines, the median of those is used.
 --   n_dollar_rates = payer/plan combinations with a dollar rate
 --   n_dollar_lines = the underlying dollar lines in the file
 --   n_percentage_rates, n_algorithm_rates, n_placeholder_rates = excluded lines
@@ -22,7 +24,10 @@ dollar as (
 payer_plan as (
     select
         hospital_ccn, code_family, code, setting, billing_class_group, payer_name, plan_name,
-        percentile(usable_rate, 0.5) as payer_plan_rate,
+        coalesce(
+            percentile(case when modifiers is null then usable_rate end, 0.5),
+            percentile(usable_rate, 0.5)
+        )                            as payer_plan_rate,
         count(usable_rate)           as n_lines
     from dollar
     group by hospital_ccn, code_family, code, setting, billing_class_group, payer_name, plan_name

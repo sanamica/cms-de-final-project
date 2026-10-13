@@ -17,7 +17,12 @@ dollar as (
 payer_plan as (
     select
         hospital_ccn, code_family, code, setting, billing_class_group, payer_category, payer_name, plan_name,
-        percentile(usable_rate, 0.5) as payer_plan_rate
+        -- median of the lines without a billing modifier (a modifier marks a variant such as a reduced
+        -- service); falls back to all lines when a payer/plan only has modified lines
+        coalesce(
+            percentile(case when modifiers is null then usable_rate end, 0.5),
+            percentile(usable_rate, 0.5)
+        )                            as payer_plan_rate
     from dollar
     group by hospital_ccn, code_family, code, setting, billing_class_group, payer_category, payer_name, plan_name
 ),

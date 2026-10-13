@@ -41,6 +41,6 @@ seeds:
     procedure_codes:
       +column_types:
         code: string
-    yer_category_rules:
+    payer_category_rules:
       +column_types:
         priority: int    

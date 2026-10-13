@@ -22,6 +22,7 @@ select
     x.hospital_ccn,
     x.hospital_name,
     u.code_type,
+    -- Hospitals label the same code CPT or HCPCS (VUMC uses HCPCS), so gold compares by family.
     case when upper(u.code_type) in ('CPT', 'HCPCS') then 'CPT/HCPCS' else upper(u.code_type) end as code_family,
     u.code,
     u.procedure_label,
@@ -59,3 +60,6 @@ select
 from unioned u
 join {{ ref('hospital_crosswalk') }} x on u.source_key = x.source_key
 left join {{ ref('stg_price_file_headers') }} f on u.source_key = f.source_key
+left join {{ ref('stg_payer_categories') }} pc
+    on  trim(u.payer_name) <=> pc.payer_name
+    and trim(u.plan_name)  <=> pc.plan_name

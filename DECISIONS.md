@@ -164,7 +164,8 @@ Databricks Git folder.
   no rule default to commercial and are flagged (`payer_category_is_default`). On the real payer list,
   41 hand-checked names all landed in the intended category; about 40% of dollar-rate lines are
   commercial by default, so the rules should be reviewed if commercial results look off. The
-  `Amerivantage` rule (Medicare Advantage) is an assumption. Three new gold models use the categories:
+  `Amerivantage` and `Network E` (exchange) rules are assumptions, and BlueCare and Bluegrass Family
+  Health are mapped to Medicaid after they showed up as low-paying commercial plans. Three new gold models use the categories:
   `gold_price_by_payer_category`, `gold_hospital_comparison_by_payer_category` (Question 1 within
   commercial plans only), and `gold_payer_category_gap` (Question 2: each category's median against the
   commercial median, per hospital and service).
@@ -177,7 +178,9 @@ Databricks Git folder.
   `methodology` column keeps that visible.
 - **Gold (built).** `gold_price_variation` (per hospital, code, setting, and billing class: median, quartiles, min, max,
   spread, and counts of excluded rates; each payer/plan is first collapsed to one rate, the median of its
-  dollar lines, so a payer listed on several lines does not outweigh one listed once); `gold_price_variation_across_hospitals` (spread of hospital
+  dollar lines without a billing modifier, so a payer listed on several lines does not outweigh one listed
+  once; a modifier marks a variant such as a reduced service, and Rutherford lists the same CPT code at
+  $6,105 and $22,577 for one plan); `gold_price_variation_across_hospitals` (spread of hospital
   medians for the same code, setting, and billing class; a hospital counts only with at least five
   payer/plans that have a dollar rate, set by the `min_payer_plans_for_comparison` variable); `gold_price_vs_readmission` (price next to the CMS 30-day
   hip/knee readmission rate, its confidence interval, and a reported flag).
