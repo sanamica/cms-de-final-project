@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # 02 Bronze load
 # MAGIC Loads every landed file into its bronze Delta table in `main.bronze`, as-is, and checks each

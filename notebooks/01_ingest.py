@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # 01 Ingest
 # MAGIC Downloads the CMS datasets and the four hospital price files into the landing Volume,
