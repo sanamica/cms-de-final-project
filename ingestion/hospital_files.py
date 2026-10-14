@@ -176,6 +176,8 @@ def download_hospital_file(
                 last_modified = resp.headers.get("last-modified")
                 if resp.status_code in cfg.retry.retryable_statuses:
                     last_error = f"HTTP {resp.status_code}"
+                    if attempt < cfg.retry.max_attempts:
+                        log.warning("retrying key=%s after attempt %s/%s: %s", spec.key, attempt, cfg.retry.max_attempts, last_error)
                     _backoff(attempt, cfg.retry)
                     continue
                 if resp.status_code != 200:
@@ -205,6 +207,8 @@ def download_hospital_file(
         except httpx.TransportError as exc:      # timeouts, connection resets, DNS
             last_error = f"{type(exc).__name__}: {exc}"
             _remove_quietly(dest)
+            if attempt < cfg.retry.max_attempts:
+                log.warning("retrying key=%s after attempt %s/%s: %s", spec.key, attempt, cfg.retry.max_attempts, last_error)
             _backoff(attempt, cfg.retry)
         except (ValueError, OSError) as exc:     # bad content or write problem: don't retry
             _remove_quietly(dest)

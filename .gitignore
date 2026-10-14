@@ -51,3 +51,4 @@ data/landing/
 # --- Logs ---
 *.log
 .md
+!dbt_project/seeds/*.csv
